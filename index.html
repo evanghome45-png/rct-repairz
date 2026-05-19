@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RCT Repairz — Business Manager</title>
+<!-- Microsoft Authentication Library (MSAL) — required for OneDrive login -->
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f5f7fa;--surface:#ffffff;--surface2:#f0f2f6;--surface3:#e8eaee;
+  --border:#dde1e8;--border2:#c8cdd8;
+  --text:#1a1d23;--text2:#5a6070;--text3:#9aa0b0;
+  --accent:#2eb84b;--accent2:#23a040;--accent-bg:#e8f8ec;
+  --red:#e03030;--red-bg:#fdeaea;--red-light:#f87171;
+  --blue:#2563eb;--blue-bg:#eff6ff;
+  --amber:#d97706;--amber-bg:#fffbeb;
+  --green:#16a34a;--green-bg:#f0fdf4;
+  --sidebar:#1a1d23;--sidebar2:#252830;--sidebar3:#2e323c;
+  --sidebar-text:#c8cdd8;--sidebar-text2:#8890a0;
+  --font:'Nunito',sans-serif;--mono:'JetBrains Mono',monospace;
+  --r:8px;--rl:12px;--shadow:0 1px 4px rgba(0,0,0,.07);--shadow2:0 4px 16px rgba(0,0,0,.1);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:var(--font)}
+
+/* ── SYNC STATUS BAR ── */
+#sync-bar{position:fixed;top:0;left:0;right:0;z-index:8000;padding:7px 16px;font-size:12px;font-weight:700;text-align:center;display:none;transition:all .3s}
+#sync-bar.syncing{display:block;background:#fffbeb;color:var(--amber);border-bottom:2px solid var(--amber)}
+#sync-bar.ok{display:block;background:var(--green-bg);color:var(--green);border-bottom:2px solid var(--green)}
+#sync-bar.err{display:block;background:var(--red-bg);color:var(--red);border-bottom:2px solid var(--red)}
+
+/* ── PIN LOCK ── */
+#pin-screen{position:fixed;inset:0;background:var(--sidebar);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:28px}
+#pin-screen.hidden{display:none}
+.pin-logo{display:flex;flex-direction:column;align-items:center;gap:12px}
+.pin-logo-img{width:100px;height:100px;border-radius:50%;background:#fff;padding:6px;box-shadow:0 0 0 4px var(--accent)}
+.pin-title{color:#fff;font-size:22px;font-weight:800;letter-spacing:.5px}
+.pin-sub{color:var(--sidebar-text2);font-size:13px;font-weight:500}
+.pin-dots{display:flex;gap:14px;margin:4px 0}
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--sidebar-text2);background:transparent;transition:all .15s}
+.pin-dot.filled{background:var(--accent);border-color:var(--accent)}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:220px}
+.pin-btn{background:var(--sidebar2);border:1px solid var(--sidebar3);border-radius:var(--rl);color:#fff;font-family:var(--font);font-size:20px;font-weight:700;padding:16px;cursor:pointer;transition:all .12s;text-align:center}
+.pin-btn:hover{background:var(--sidebar3)}
+.pin-btn:active{transform:scale(.95);background:var(--accent);border-color:var(--accent)}
+.pin-btn.del{font-size:16px;color:var(--sidebar-text2)}
+.pin-btn.zero{grid-column:2}
+.pin-error{color:var(--red-light);font-size:12px;font-weight:600;height:18px;text-align:center}
+.pin-change{color:var(--sidebar-text2);font-size:11px;font-weight:500;cursor:pointer;text-decoration:underline;text-underline-offset:2px;margin-top:-10px}
+.pin-change:hover{color:#fff}
+
+/* ── LAYOUT ── */
+body{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:220px;min-width:220px;background:var(--sidebar);display:flex;flex-direction:column;overflow-y:auto}
+.logo-wrap{padding:20px 16px 18px;border-bottom:1px solid var(--sidebar3);display:flex;align-items:center;gap:12px}
+.logo-img{width:44px;height:44px;border-radius:50%;background:#fff;padding:2px;flex-shrink:0}
+.logo-mark{font-size:15px;font-weight:800;color:#fff;letter-spacing:.3px}
+.logo-sub{font-size:10px;color:var(--sidebar-text2);letter-spacing:.5px;text-transform:uppercase;margin-top:1px}
+.nav-sec{padding:12px 8px 4px}
+.nav-lbl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--sidebar-text2);padding:0 8px;margin-bottom:6px;font-weight:700}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--r);cursor:pointer;color:var(--sidebar-text);font-size:13px;font-weight:600;transition:all .12s;border:1px solid transparent;margin-bottom:2px}
+.nav-item:hover{background:var(--sidebar2);color:#fff}
+.nav-item.active{background:var(--accent);color:#fff}
+.nav-icon{font-size:15px;width:18px;text-align:center}
+.sb-footer{margin-top:auto;padding:14px;border-top:1px solid var(--sidebar3);display:flex;flex-direction:column;gap:8px}
+.od-badge{display:flex;align-items:center;gap:8px;padding:9px 10px;background:var(--sidebar2);border-radius:var(--r);border:1px solid var(--sidebar3);cursor:pointer;transition:border-color .12s}
+.od-badge:hover{border-color:#3e4250}
+.od-dot{width:8px;height:8px;border-radius:50%;background:var(--sidebar-text2);flex-shrink:0}
+.od-dot.on{background:var(--accent)}
+.od-dot.syncing{background:var(--amber);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.od-txt{font-size:10px;color:var(--sidebar-text2);line-height:1.3}
+.od-txt strong{color:var(--sidebar-text);font-weight:700;display:block;font-size:11px}
+.od-signin-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 10px;background:var(--accent);border-radius:var(--r);border:none;color:#fff;font-family:var(--font);font-size:11px;font-weight:700;cursor:pointer;transition:background .12s;width:100%}
+.od-signin-btn:hover{background:var(--accent2)}
+.od-signin-btn.signout{background:var(--sidebar2);color:var(--sidebar-text);border:1px solid var(--sidebar3)}
+.od-signin-btn.signout:hover{background:var(--sidebar3)}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;box-shadow:var(--shadow)}
+.topbar-title{font-size:18px;font-weight:800;color:var(--text)}
+.topbar-r{display:flex;align-items:center;gap:10px}
+.u-chip{display:flex;align-items:center;gap:7px;padding:6px 12px;background:var(--surface2);border-radius:30px;border:1px solid var(--border);font-size:12px;font-weight:600;color:var(--text2)}
+.u-av{width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff}
+.content{flex:1;overflow-y:auto;padding:22px 26px}
+.section{display:none}.section.active{display:block}
+.sec-h{font-size:22px;font-weight:800;color:var(--text);margin-bottom:18px}
+
+/* ── METRICS ── */
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-bottom:22px}
+.mc{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:16px 18px;box-shadow:var(--shadow);border-top:3px solid var(--border)}
+.mc.g{border-top-color:var(--green)}.mc.r{border-top-color:var(--red)}.mc.b{border-top-color:var(--blue)}.mc.a{border-top-color:var(--amber)}
+.m-lbl{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.m-val{font-size:26px;font-weight:800;color:var(--text)}
+.m-val.g{color:var(--green)}.m-val.a{color:var(--amber)}.m-val.r{color:var(--red)}
+
+/* ── CARDS ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.card-title{font-size:14px;font-weight:800;color:var(--text);display:flex;align-items:center;gap:8px}
+.ct-icon{color:var(--accent);font-size:16px}
+
+/* ── FORMS ── */
+.form-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.form-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:11px;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.field input,.field select,.field textarea{background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--font);font-size:13px;font-weight:600;padding:9px 12px;outline:none;transition:border-color .12s;width:100%}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);background:#fff}
+.field input::placeholder{color:var(--text3);font-weight:400}
+.field textarea{resize:vertical;min-height:54px}
+select option{background:#fff;color:var(--text)}
+.btn-row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.btn{padding:8px 18px;border-radius:var(--r);border:1.5px solid var(--border2);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;transition:all .12s}
+.btn-ghost{background:#fff;color:var(--text2)}.btn-ghost:hover{background:var(--surface2)}
+.btn-acc{background:var(--accent);color:#fff;border-color:var(--accent)}.btn-acc:hover{background:var(--accent2)}
+
+/* ── SEARCH ── */
+.srch-row{display:flex;gap:10px;margin-bottom:14px}
+.srch-row input{flex:1;background:#fff;border:1.5px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--font);font-size:13px;font-weight:600;padding:9px 14px;outline:none}
+.srch-row input:focus{border-color:var(--accent)}
+.srch-row input::placeholder{color:var(--text3);font-weight:400}
+.srch-row select{background:#fff;border:1.5px solid var(--border);border-radius:var(--r);color:var(--text2);font-family:var(--font);font-size:12px;font-weight:600;padding:9px 12px;outline:none}
+
+/* ── ITEM ROWS ── */
+.items-list{display:flex;flex-direction:column;gap:8px}
+.ir{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;background:#fff;border:1.5px solid var(--border);border-radius:var(--rl);transition:border-color .12s;box-shadow:var(--shadow)}
+.ir:hover{border-color:var(--border2);box-shadow:var(--shadow2)}
+.i-info{flex:1;min-width:0}
+.i-name{font-size:14px;color:var(--text);font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.i-meta{font-size:12px;color:var(--text3);font-weight:500}
+.i-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;margin-top:2px}
+.pnum{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--green);white-space:nowrap}
+.pneg{color:var(--red)}
+.ibtn{background:transparent;border:1.5px solid var(--border);border-radius:var(--r);cursor:pointer;color:var(--text3);padding:5px 9px;font-size:12px;font-weight:700;transition:all .12s;line-height:1;font-family:var(--font)}
+.ibtn:hover{color:var(--blue);background:var(--blue-bg);border-color:var(--blue)}
+.ibtn.del-btn:hover{color:var(--red);background:var(--red-bg);border-color:var(--red)}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;font-size:11px;padding:3px 9px;border-radius:20px;font-weight:700;white-space:nowrap}
+.bg{background:var(--green-bg);color:var(--green)}.br{background:var(--red-bg);color:var(--red)}.ba{background:var(--amber-bg);color:var(--amber)}.bb{background:var(--blue-bg);color:var(--blue)}.bgr{background:var(--surface2);color:var(--text2)}
+.empty{text-align:center;padding:36px 16px;color:var(--text3);font-size:13px;font-weight:600;border:2px dashed var(--border);border-radius:var(--rl);background:var(--surface2)}
+
+/* ── MODALS ── */
+.modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center;padding:16px}
+.modal-ov.open{display:flex}
+.modal{background:#fff;border:1px solid var(--border);border-radius:var(--rl);padding:26px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow2)}
+.modal-title{font-size:18px;font-weight:800;margin-bottom:6px;color:var(--text)}
+.modal-sub{font-size:13px;color:var(--text2);font-weight:500;margin-bottom:18px;line-height:1.6}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.mi{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.mi label{font-size:11px;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.mi input,.mi select{background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--font);font-size:13px;font-weight:600;padding:9px 12px;outline:none;width:100%}
+.mi input:focus,.mi select:focus{border-color:var(--accent);background:#fff}
+
+/* ── ONEDRIVE STATUS PANEL ── */
+.od-status-panel{background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:16px}
+.od-status-row{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:var(--text2)}
+.od-status-row .od-dot{width:10px;height:10px}
+.od-info{font-size:11px;color:var(--text3);font-weight:500;margin-top:6px;line-height:1.5}
+.od-warn{background:#fffbeb;border:1.5px solid var(--amber);border-radius:var(--r);padding:12px 14px;font-size:12px;color:var(--amber);font-weight:600;line-height:1.5;margin-bottom:14px}
+.od-warn strong{display:block;margin-bottom:4px;font-size:13px}
+
+/* ── STEP LIST ── */
+.step-list{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
+.step{display:flex;gap:12px;padding:11px 13px;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)}
+.step-n{width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.step-t{font-size:12px;color:var(--text2);font-weight:500;line-height:1.55}
+.step-t strong{color:var(--text);font-weight:700}
+.step-t code{background:var(--surface3);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:11px}
+
+/* ── ACTIVITY ── */
+.act-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px}
+.act-row:last-child{border-bottom:none}
+.act-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ── EDIT MODAL GRIDS ── */
+.em-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+@media(max-width:650px){
+  .sidebar{width:54px;min-width:54px}
+  .logo-text,.nav-item span,.nav-lbl,.od-txt,.logo-sub,.od-signin-btn span{display:none}
+  .logo-img{width:36px;height:36px}
+  .nav-item{justify-content:center;padding:10px}
+  .form-2,.form-3,.em-2{grid-template-columns:1fr}
+  .content{padding:14px 12px}
+}
+</style>
+</head>
+<body>
+
+<!-- SYNC STATUS BAR -->
+<div id="sync-bar"></div>
+
+<!-- PIN LOCK -->
+<div id="pin-screen">
+  <div class="pin-logo">
+    <img class="pin-logo-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%232eb84b'/%3E%3Ccircle cx='50' cy='50' r='38' fill='white'/%3E%3Ctext x='50' y='44' font-family='Arial Black' font-size='18' font-weight='900' text-anchor='middle' fill='%231a1d23'%3ERCT%3C/text%3E%3Ctext x='50' y='64' font-family='Arial' font-size='12' font-weight='700' text-anchor='middle' fill='%231a1d23'%3Erepairz%3C/text%3E%3C/svg%3E" alt="RCT Repairz">
+    <div class="pin-title">RCT Repairz</div>
+    <div class="pin-sub">Enter your 4-digit PIN to continue</div>
+  </div>
+  <div class="pin-dots" id="pin-dots">
+    <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+  </div>
+  <div class="pin-error" id="pin-err"></div>
+  <div class="pin-pad">
+    <button class="pin-btn" onclick="pinKey('1')">1</button>
+    <button class="pin-btn" onclick="pinKey('2')">2</button>
+    <button class="pin-btn" onclick="pinKey('3')">3</button>
+    <button class="pin-btn" onclick="pinKey('4')">4</button>
+    <button class="pin-btn" onclick="pinKey('5')">5</button>
+    <button class="pin-btn" onclick="pinKey('6')">6</button>
+    <button class="pin-btn" onclick="pinKey('7')">7</button>
+    <button class="pin-btn" onclick="pinKey('8')">8</button>
+    <button class="pin-btn" onclick="pinKey('9')">9</button>
+    <button class="pin-btn zero" onclick="pinKey('0')">0</button>
+    <button class="pin-btn del" onclick="pinDel()">⌫</button>
+  </div>
+  <span class="pin-change" onclick="showChangePinModal()">Change PIN</span>
+</div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="logo-wrap">
+    <img class="logo-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%232eb84b'/%3E%3Ccircle cx='50' cy='50' r='38' fill='white'/%3E%3Ctext x='50' y='44' font-family='Arial Black' font-size='18' font-weight='900' text-anchor='middle' fill='%231a1d23'%3ERCT%3C/text%3E%3Ctext x='50' y='64' font-family='Arial' font-size='12' font-weight='700' text-anchor='middle' fill='%231a1d23'%3Erepairz%3C/text%3E%3C/svg%3E" alt="">
+    <div class="logo-text">
+      <div class="logo-mark">RCT Repairz</div>
+      <div class="logo-sub">Business Manager</div>
+    </div>
+  </div>
+  <div class="nav-sec">
+    <div class="nav-lbl">Menu</div>
+    <div class="nav-item active" onclick="show('dashboard')" id="nav-dashboard"><span class="nav-icon">📊</span><span>Dashboard</span></div>
+    <div class="nav-item" onclick="show('stock')" id="nav-stock"><span class="nav-icon">📦</span><span>Stock</span></div>
+    <div class="nav-item" onclick="show('repairs')" id="nav-repairs"><span class="nav-icon">🔧</span><span>Repairs</span></div>
+    <div class="nav-item" onclick="show('parts')" id="nav-parts"><span class="nav-icon">🔩</span><span>Parts</span></div>
+    <div class="nav-item" onclick="show('joblots')" id="nav-joblots"><span class="nav-icon">📋</span><span>Job Lots</span></div>
+    <div class="nav-item" onclick="show('returns')" id="nav-returns"><span class="nav-icon">↩️</span><span>Returns</span></div>
+  </div>
+  <div class="sb-footer">
+    <div class="od-badge" onclick="openOD()">
+      <div class="od-dot" id="od-dot"></div>
+      <div class="od-txt"><strong>OneDrive</strong><span id="od-st">Not connected</span></div>
+    </div>
+    <button class="od-signin-btn" id="od-signin-btn" onclick="odSignIn()">
+      <span>☁️</span><span>Sign in to OneDrive</span>
+    </button>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="tb-title">Dashboard</div>
+    <div class="topbar-r">
+      <div class="u-chip"><div class="u-av" id="u-av">??</div><span id="u-nm">Employee</span></div>
+      <button class="btn btn-ghost" onclick="forceSyncNow()" style="font-size:12px;padding:6px 14px;" title="Force sync to OneDrive">⟳ Sync</button>
+      <button class="btn btn-ghost" onclick="exportData()" style="font-size:12px;padding:6px 14px;">⬇ Export</button>
+      <button class="btn btn-ghost" onclick="lockApp()" style="font-size:12px;padding:6px 14px;">🔒 Lock</button>
+    </div>
+  </div>
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div class="section active" id="section-dashboard">
+      <div class="sec-h">Overview</div>
+      <div id="od-dashboard-notice"></div>
+      <div class="metrics-grid" id="dash-metrics"></div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="ct-icon">📋</span> Recent activity</div></div>
+        <div id="recent-list"></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="ct-icon" style="color:var(--red)">⚠️</span> Unpaid repairs</div></div>
+        <div id="unpaid-list"></div>
+      </div>
+    </div>
+
+    <!-- STOCK -->
+    <div class="section" id="section-stock">
+      <div class="sec-h">Stock</div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="ct-icon">➕</span> Add stock item</div></div>
+        <div class="form-2" style="margin-top:0">
+          <div class="field"><label>Item name</label><input id="s-name" placeholder="e.g. Xbox 360 Slim Black"></div>
+          <div class="field"><label>Source</label><input id="s-source" placeholder="e.g. Facebook Salford"></div>
+        </div>
+        <div class="form-3">
+          <div class="field"><label>Buy cost (£)</label><input id="s-cost" type="number" step="0.01" placeholder="0.00"></div>
+          <div class="field"><label>Fix cost (£)</label><input id="s-fix" type="number" step="0.01" placeholder="0.00"></div>
+          <div class="field"><label>Market price (£)</label><input id="s-price" type="number" step="0.01" placeholder="0.00"></div>
+        </div>
+        <div class="form-2">
+          <div class="field"><label>Faults</label><input id="s-faults" placeholder="e.g. RROD, no eject"></div>
+          <div class="field"><label>Description</label><input id="s-desc" placeholder="e.g. Console only, no HDD"></div>
+        </div>
+        <div class="form-2">
+          <div class="field"><label>Date bought</label><input id="s-date" type="date"></div>
+          <div class="field"><label>Status</label><select id="s-status"><option value="In stock">In stock</option><option value="Sold">Sold</option><option value="For parts">For parts</option><option value="Trade">Trade</option></select></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="clf('stock')">Clear</button>
+          <button class="btn btn-acc" onclick="addStock()">+ Add item</button>
+        </div>
+      </div>
+      <div class="srch-row">
+        <input placeholder="🔍  Search stock..." oninput="rStock()" id="s-srch">
+        <select onchange="rStock()" id="s-flt"><option value="">All status</option><option>In stock</option><option>Sold</option><option>For parts</option><option>Trade</option></select>
+      </div>
+      <div class="items-list" id="stock-list"></div>
+    </div>
+
+    <!-- REPAIRS -->
+    <div class="section" id="section-repairs">
+      <div class="sec-h">Repairs</div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="ct-icon">➕</span> Log repair job</div></div>
+        <div class="form-2" style="margin-top:0">
+          <div class="field"><label>Customer name</label><input id="r-name" placeholder="e.g. Sarah"></div>
+          <div class="field"><label>Phone / contact</label><input id="r-phone" placeholder="e.g. 07700 900000"></div>
+        </div>
+        <div class="form-2">
+          <div class="field"><label>Device</label><input id="r-item" placeholder="e.g. iPhone SE 2022"></div>
+          <div class="field"><label>Fault</label><input id="r-fault" placeholder="e.g. Dead screen"></div>
+        </div>
+        <div class="form-3">
+          <div class="field"><label>Parts cost (£)</label><input id="r-parts" type="number" step="0.01" placeholder="0.00"></div>
+          <div class="field"><label>Charge to customer (£)</label><input id="r-charge" type="number" step="0.01" placeholder="0.00"></div>
+          <div class="field"><label>Payment</label><select id="r-pay"><option value="Unpaid">Unpaid</option><option value="Paid upfront">Paid upfront</option><option value="Paid on collection">Paid on collection</option></select></div>
+        </div>
+        <div class="form-2">
+          <div class="field"><label>Date collected</label><input id="r-in" type="date"></div>
+          <div class="field"><label>Due date</label><input id="r-due" type="date"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="clf('repair')">Clear</button>
+          <button class="btn btn-acc" onclick="addRepair()">+ Log job</button>
+        </div>
+      </div>
+      <div class="srch-row">
+        <input placeholder="🔍  Search repairs..." oninput="rRepairs()" id="r-srch">
+        <select onchange="rRepairs()" id="r-flt"><option value="">All payments</option><option>Unpaid</option><option value="Paid upfront">Paid upfront</option><option value="Paid on collection">Paid on collection</option></select>
+      </div>
+      <div class="items-list" id="repair-list"></div>
+    </div>
+
+    <!-- PARTS -->
+    <div class="section" id="section-parts">
+      <div class="sec-h">Parts Bought</div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="ct-icon">➕</span> Add part purchase</div></div>
+        <div class="form-2" style="margin-top:0">
+          <div class="field"><label>Part name</label><input id="p-name" placeholder="e.g. iPhone 11 OLED screen"></div>
+          <div class="field"><label>Supplier</label><select id="p-sup"><option>AliExpress</option><option>eBay</option><option>Market</option><option>Facebook</option><option>Other</option></select></div>
+        </div>
+        <div class="form-3">
+          <div class="field"><label>Cost (£)</label><input id="p-cost" type="number" step="0.01" placeholder="0.00"></div>
+          <div class="field"><label>Qty</label><input id="p-qty" type="number" value="1" min="1"></div>
+          <div class="field"><label>Used for</label><input id="p-for" placeholder="e.g. R3 or Tools"></div>
+        </div>
+        <div class="form-2">
+          <div class="field"><label>Date ordered</label><input id="p-date" type="date"></div>
+          <div class="field"><label>Category</label><select id="p-cat"><option value="Job part">Job part</option><option value="Tool">Tool</option><option value="Stock part">Stock part</option></select></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="clf('parts')">Clear</button>
+          <button class="btn btn-acc" onclick="addPart()">+ Add part</button>
+        </div>
+      </div>
+      <div class="srch-row">
+        <input placeholder="🔍  Search parts..." oninput="rParts()" id="p-srch">
+        <select onchange="rParts()" id="p-flt"><option value="">All</option><option value="Job part">Job parts</option><option value="Tool">Tools</option><option value="Stock part">Stock parts</option></select>
+      </div>
+      <div class="items-list" id="parts-list"></div>
+    </div>
+
+    <!-- JOB LOTS -->
+    <div class="section" id="section-joblots">
+      <div class="sec-h">Job Lots</div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="ct-icon">➕</span> Add job lot item</div></div>
+        <div class="form-2" style="margin-top:0">
+          <div class="field"><label>Item name</label><input id="j-name" placeholder="e.g. iPhone 14 Pro Max case"></div>
+          <div class="field"><label>Lot reference</label><input id="j-ref" placeholder="e.g. JL1"></div>
+        </div>
+        <div class="form-3">
+          <div class="field"><label>Buy cost (£)</label><input id="j-cost" type="number" step="0.01" placeholder="0.00"></div>
+          <div class="field"><label>Market price (£)</label><input id="j-price" type="number" step="0.01" placeholder="0.00"></div>
+          <div class="field"><label>Action</label><select id="j-act"><option value="Sell">Sell</option><option value="Keep">Keep</option><option value="Sold">Sold</option></select></div>
+        </div>
+        <div class="form-2">
+          <div class="field"><label>Description</label><input id="j-desc" placeholder="e.g. Sealed, game only"></div>
+          <div class="field"><label>Date</label><input id="j-date" type="date"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="clf('joblot')">Clear</button>
+          <button class="btn btn-acc" onclick="addJL()">+ Add item</button>
+        </div>
+      </div>
+      <div class="srch-row">
+        <input placeholder="🔍  Search job lots..." oninput="rJL()" id="j-srch">
+        <select onchange="rJL()" id="j-flt"><option value="">All</option><option value="Sell">To sell</option><option value="Keep">Keep</option><option value="Sold">Sold</option></select>
+      </div>
+      <div class="items-list" id="jl-list"></div>
+    </div>
+
+    <!-- RETURNS -->
+    <div class="section" id="section-returns">
+      <div class="sec-h">Returns</div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="ct-icon">➕</span> Log return</div></div>
+        <div class="form-2" style="margin-top:0">
+          <div class="field"><label>Reference ID</label><input id="rt-id" placeholder="e.g. JL33 or S8"></div>
+          <div class="field"><label>Item name</label><input id="rt-name" placeholder="e.g. iPhone 14 Pro Max case"></div>
+        </div>
+        <div class="form-3">
+          <div class="field"><label>Originally sold (£)</label><input id="rt-sold" type="number" step="0.01" placeholder="0.00"></div>
+          <div class="field"><label>Return cost (£)</label><input id="rt-cost" type="number" step="0.01" placeholder="0.00"></div>
+          <div class="field"><label>Date of return</label><input id="rt-date" type="date"></div>
+        </div>
+        <div class="form-2">
+          <div class="field"><label>Reason</label><input id="rt-rsn" placeholder="e.g. Wrong item, not as described"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="clf('return')">Clear</button>
+          <button class="btn btn-acc" onclick="addReturn()">+ Log return</button>
+        </div>
+      </div>
+      <div class="items-list" id="rt-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ONEDRIVE MODAL -->
+<div class="modal-ov" id="od-modal">
+  <div class="modal">
+    <div class="modal-title">☁️ OneDrive Sync Setup</div>
+    <div class="modal-sub">Your data saves to a shared file on OneDrive so both employees see the same data on any computer.</div>
+
+    <div class="od-status-panel">
+      <div class="od-status-row"><div class="od-dot" id="od-dot-modal"></div><span id="od-status-text">Checking status...</span></div>
+      <div class="od-info" id="od-info-text"></div>
+    </div>
+
+    <div class="od-warn" id="od-redirect-warn" style="display:none">
+      <strong>⚠️ One-time Azure setup needed</strong>
+      You need to add this page's URL as an allowed redirect URI in Azure. See steps below. This only needs doing once.
+    </div>
+
+    <div class="step-list">
+      <div class="step"><div class="step-n">1</div><div class="step-t"><strong>Azure App Client ID is already set</strong> to <code>833c10c1-23b7-42ae-9d12-3dd6df1b73d5</code>. This is correct ✅</div></div>
+      <div class="step"><div class="step-n">2</div><div class="step-t"><strong>In Azure portal.azure.com</strong>, go to your app → Authentication → Add platform → Single-page application. Set Redirect URI to: <code id="od-current-url">loading...</code></div></div>
+      <div class="step"><div class="step-n">3</div><div class="step-t"><strong>Also tick both checkboxes</strong> under "Implicit grant": Access tokens ✅ and ID tokens ✅. Click Save.</div></div>
+      <div class="step"><div class="step-n">4</div><div class="step-t"><strong>Click "Sign in to OneDrive"</strong> below. Each employee signs in with their own Microsoft 365 account. Data syncs automatically to a shared file.</div></div>
+      <div class="step"><div class="step-n">5</div><div class="step-t"><strong>First person to sign in</strong> creates the shared database. Second employee — their data merges with what's already there on OneDrive.</div></div>
+    </div>
+
+    <div class="mi"><label>Your name (shown in top bar)</label><input id="od-uname" placeholder="e.g. Ryan or Iggy"></div>
+
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeOD()">Close</button>
+      <button class="btn btn-acc" id="od-modal-signin-btn" onclick="odSignIn()">☁️ Sign in to OneDrive</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-ov" id="edit-modal">
+  <div class="modal">
+    <div class="modal-title" id="edit-title">Edit Item</div>
+    <div id="edit-body"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeEdit()">Cancel</button>
+      <button class="btn btn-acc" onclick="saveEdit()">💾 Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANGE PIN MODAL -->
+<div class="modal-ov" id="change-pin-modal">
+  <div class="modal" style="max-width:340px">
+    <div class="modal-title">🔑 Change PIN</div>
+    <div class="modal-sub">Enter your current PIN, then set a new 4-digit PIN.</div>
+    <div class="mi"><label>Current PIN</label><input id="cp-old" type="password" maxlength="4" placeholder="••••" inputmode="numeric"></div>
+    <div class="mi"><label>New PIN (4 digits)</label><input id="cp-new" type="password" maxlength="4" placeholder="••••" inputmode="numeric"></div>
+    <div class="mi"><label>Confirm new PIN</label><input id="cp-conf" type="password" maxlength="4" placeholder="••••" inputmode="numeric"></div>
+    <div id="cp-err" style="color:var(--red);font-size:12px;font-weight:600;min-height:18px;margin-bottom:6px"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeChangePinModal()">Cancel</button>
+      <button class="btn btn-acc" onclick="doChangePin()">Update PIN</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════
+//  CONFIGURATION — your Azure Client ID is hardcoded
+// ════════════════════════════════════════════════════
+const CLIENT_ID = '833c10c1-23b7-42ae-9d12-3dd6df1b73d5';
+const OD_FILE   = 'rct_repairz_database.json'; // file saved in user's OneDrive root
+const OD_SCOPES = ['Files.ReadWrite', 'User.Read'];
+
+// ════════════════════════════════════════════════════
+//  MSAL (Microsoft Authentication) SETUP
+// ════════════════════════════════════════════════════
+let msalApp = null;
+let odAccount = null;
+let syncTimeout = null;
+
+function initMSAL() {
+  try {
+    msalApp = new msal.PublicClientApplication({
+      auth: {
+        clientId: CLIENT_ID,
+        authority: 'https://login.microsoftonline.com/common',
+        redirectUri: window.location.href.split('?')[0].split('#')[0]
+      },
+      cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
+    });
+    document.getElementById('od-current-url').textContent = window.location.href.split('?')[0].split('#')[0];
+
+    // Handle redirect after Microsoft login
+    msalApp.handleRedirectPromise().then(resp => {
+      if (resp) {
+        odAccount = resp.account;
+        db.settings.odAccountName = odAccount.name || odAccount.username;
+        saveLocal();
+        syncBar('ok', '✅ Signed in as ' + odAccount.name);
+        updateODUI();
+        odLoadFromCloud(); // pull latest data from OneDrive
+      }
+    }).catch(err => {
+      console.warn('MSAL redirect error:', err);
+      syncBar('err', '⚠️ Sign-in error: ' + err.message);
+    });
+
+    // Check if already signed in
+    const accounts = msalApp.getAllAccounts();
+    if (accounts.length > 0) {
+      odAccount = accounts[0];
+      db.settings.odAccountName = odAccount.name || odAccount.username;
+      updateODUI();
+      odLoadFromCloud();
+    }
+  } catch(e) {
+    console.warn('MSAL init failed:', e);
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  ONEDRIVE AUTH
+// ════════════════════════════════════════════════════
+async function odSignIn() {
+  if (!msalApp) { alert('Authentication library not loaded. Check your internet connection.'); return; }
+  try {
+    // Try silent first
+    const accounts = msalApp.getAllAccounts();
+    if (accounts.length > 0) {
+      odAccount = accounts[0];
+      updateODUI();
+      closeOD();
+      await odLoadFromCloud();
+      return;
+    }
+    // Redirect login (works in all browsers, no popup blocked)
+    await msalApp.loginRedirect({ scopes: OD_SCOPES });
+  } catch(e) {
+    syncBar('err', '⚠️ Sign-in failed: ' + e.message);
+  }
+}
+
+async function odSignOut() {
+  if (!msalApp || !odAccount) return;
+  odAccount = null;
+  db.settings.odAccountName = '';
+  saveLocal();
+  updateODUI();
+  if (msalApp) msalApp.logoutRedirect();
+}
+
+async function getODToken() {
+  if (!msalApp || !odAccount) return null;
+  try {
+    const resp = await msalApp.acquireTokenSilent({ scopes: OD_SCOPES, account: odAccount });
+    return resp.accessToken;
+  } catch(e) {
+    try {
+      await msalApp.acquireTokenRedirect({ scopes: OD_SCOPES });
+    } catch(e2) { return null; }
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  ONEDRIVE FILE READ / WRITE
+// ════════════════════════════════════════════════════
+async function odLoadFromCloud() {
+  const token = await getODToken();
+  if (!token) return;
+  syncBar('syncing', '☁️ Loading latest data from OneDrive...');
+  try {
+    const resp = await fetch(
+      `https://graph.microsoft.com/v1.0/me/drive/root:/${OD_FILE}:/content`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (resp.status === 404) {
+      // File doesn't exist yet — this is the first user. Push local data up.
+      syncBar('syncing', '☁️ First time setup — uploading your data to OneDrive...');
+      await odSaveToCloud();
+      return;
+    }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const cloudData = await resp.json();
+    // Merge: cloud wins for any record that exists, local adds new records
+    mergeCloudData(cloudData);
+    saveLocal();
+    refreshCurrentSection();
+    syncBar('ok', '✅ Synced from OneDrive — data is up to date');
+    updateODUI();
+  } catch(e) {
+    syncBar('err', '⚠️ Could not load from OneDrive: ' + e.message);
+  }
+}
+
+async function odSaveToCloud() {
+  const token = await getODToken();
+  if (!token) {
+    saveLocal(); // fall back to local only
+    return;
+  }
+  try {
+    const json = JSON.stringify(db, null, 2);
+    const resp = await fetch(
+      `https://graph.microsoft.com/v1.0/me/drive/root:/${OD_FILE}:/content`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        },
+        body: json
+      }
+    );
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    syncBar('ok', '✅ Saved to OneDrive');
+  } catch(e) {
+    syncBar('err', '⚠️ OneDrive save failed — saved locally only. Error: ' + e.message);
+  }
+}
+
+function mergeCloudData(cloud) {
+  // For each section, merge cloud records (cloud is source of truth)
+  // Any local records not on cloud (added offline) are kept and will be pushed
+  ['stock','repairs','parts','joblots','returns'].forEach(key => {
+    if (!cloud[key]) return;
+    const cloudIds = new Set(cloud[key].map(i => i.id));
+    const localOnly = db[key].filter(i => !cloudIds.has(i.id));
+    db[key] = [...cloud[key], ...localOnly];
+  });
+  // Recalculate max IDs
+  ['stock','repairs','parts','joblots','returns'].forEach(key => {
+    nid[key] = Math.max(...db[key].map(x => x.id), 0) + 1;
+  });
+  // Keep local username setting but take cloud client settings
+  if (cloud.settings) {
+    db.settings.clientId = cloud.settings.clientId || db.settings.clientId;
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  SAVE — writes locally AND to OneDrive
+// ════════════════════════════════════════════════════
+function saveLocal() {
+  localStorage.setItem(SK, JSON.stringify(db));
+}
+
+function save() {
+  saveLocal();
+  // Debounce cloud saves: wait 1.5s after last change before uploading
+  clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(() => {
+    if (odAccount) {
+      syncBar('syncing', '☁️ Saving to OneDrive...');
+      odSaveToCloud();
+    }
+  }, 1500);
+}
+
+async function forceSyncNow() {
+  if (!odAccount) {
+    alert('You are not signed in to OneDrive yet.\n\nClick the OneDrive button in the sidebar to sign in.');
+    return;
+  }
+  syncBar('syncing', '☁️ Syncing...');
+  await odLoadFromCloud();
+  await odSaveToCloud();
+}
+
+// ════════════════════════════════════════════════════
+//  SYNC STATUS BAR
+// ════════════════════════════════════════════════════
+let syncBarTimer = null;
+function syncBar(type, msg) {
+  const bar = document.getElementById('sync-bar');
+  bar.className = type;
+  bar.textContent = msg;
+  clearTimeout(syncBarTimer);
+  if (type === 'ok') syncBarTimer = setTimeout(() => { bar.style.display='none'; }, 3000);
+}
+
+// ════════════════════════════════════════════════════
+//  UPDATE UI AFTER AUTH STATE CHANGE
+// ════════════════════════════════════════════════════
+function updateODUI() {
+  const signed = !!odAccount;
+  const dot = document.getElementById('od-dot');
+  const dotModal = document.getElementById('od-dot-modal');
+  const st = document.getElementById('od-st');
+  const signinBtn = document.getElementById('od-signin-btn');
+  const modalSigninBtn = document.getElementById('od-modal-signin-btn');
+  const statusText = document.getElementById('od-status-text');
+  const infoText = document.getElementById('od-info-text');
+
+  if (signed) {
+    dot.className = 'od-dot on';
+    if(dotModal) dotModal.className = 'od-dot on';
+    st.textContent = 'Connected';
+    signinBtn.innerHTML = '<span>☁️</span><span>Sign out of OneDrive</span>';
+    signinBtn.className = 'od-signin-btn signout';
+    signinBtn.onclick = odSignOut;
+    if(modalSigninBtn){ modalSigninBtn.textContent = 'Sign out'; modalSigninBtn.onclick = odSignOut; }
+    if(statusText) statusText.textContent = '✅ Connected as ' + (odAccount.name || odAccount.username);
+    if(infoText) infoText.textContent = 'Data is syncing to OneDrive. Both employees must sign in with their own Microsoft 365 account.';
+    // Update dashboard notice
+    const notice = document.getElementById('od-dashboard-notice');
+    if(notice) notice.innerHTML = '';
+  } else {
+    dot.className = 'od-dot';
+    if(dotModal) dotModal.className = 'od-dot';
+    st.textContent = 'Not connected';
+    signinBtn.innerHTML = '<span>☁️</span><span>Sign in to OneDrive</span>';
+    signinBtn.className = 'od-signin-btn';
+    signinBtn.onclick = odSignIn;
+    if(modalSigninBtn){ modalSigninBtn.textContent = '☁️ Sign in to OneDrive'; modalSigninBtn.onclick = odSignIn; }
+    if(statusText) statusText.textContent = '⚠️ Not signed in — data is saving locally only';
+    if(infoText) infoText.textContent = 'Sign in with your Microsoft 365 account to enable shared sync between both employees.';
+    // Show dashboard warning
+    const notice = document.getElementById('od-dashboard-notice');
+    if(notice) notice.innerHTML = `<div class="od-warn" style="margin-bottom:16px"><strong>⚠️ OneDrive not connected — data is local only</strong>Changes made here will NOT be seen on another computer until you sign in to OneDrive. Click "Sign in to OneDrive" in the sidebar.</div>`;
+  }
+  updateChip();
+}
+
+// ════════════════════════════════════════════════════
+//  PIN SYSTEM
+// ════════════════════════════════════════════════════
+const PIN_KEY = 'rct_pin';
+const DEFAULT_PIN = '1234';
+let pinEntry = '';
+function getPin(){ return localStorage.getItem(PIN_KEY) || DEFAULT_PIN; }
+function pinKey(d){
+  if(pinEntry.length>=4)return;
+  pinEntry+=d;
+  document.getElementById('pd'+(pinEntry.length-1)).classList.add('filled');
+  if(pinEntry.length===4)setTimeout(checkPin,120);
+}
+function pinDel(){
+  if(!pinEntry.length)return;
+  document.getElementById('pd'+(pinEntry.length-1)).classList.remove('filled');
+  pinEntry=pinEntry.slice(0,-1);
+}
+function checkPin(){
+  if(pinEntry===getPin()){
+    document.getElementById('pin-screen').classList.add('hidden');
+    document.getElementById('pin-err').textContent='';
+  } else {
+    document.getElementById('pin-err').textContent='Incorrect PIN — try again';
+    pinEntry='';
+    for(let i=0;i<4;i++)document.getElementById('pd'+i).classList.remove('filled');
+  }
+}
+function lockApp(){
+  pinEntry='';
+  for(let i=0;i<4;i++)document.getElementById('pd'+i).classList.remove('filled');
+  document.getElementById('pin-err').textContent='';
+  document.getElementById('pin-screen').classList.remove('hidden');
+}
+function showChangePinModal(){ document.getElementById('change-pin-modal').classList.add('open'); }
+function closeChangePinModal(){
+  document.getElementById('change-pin-modal').classList.remove('open');
+  ['cp-old','cp-new','cp-conf'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('cp-err').textContent='';
+}
+function doChangePin(){
+  const old=document.getElementById('cp-old').value;
+  const nw=document.getElementById('cp-new').value;
+  const conf=document.getElementById('cp-conf').value;
+  if(old!==getPin()){document.getElementById('cp-err').textContent='Current PIN is incorrect.';return;}
+  if(!/^\d{4}$/.test(nw)){document.getElementById('cp-err').textContent='New PIN must be exactly 4 digits.';return;}
+  if(nw!==conf){document.getElementById('cp-err').textContent='New PINs do not match.';return;}
+  localStorage.setItem(PIN_KEY,nw);
+  closeChangePinModal();
+  alert('PIN updated! New PIN: '+nw+'\n\nTell the other employee the new PIN.');
+}
+document.addEventListener('keydown',e=>{
+  if(document.getElementById('pin-screen').classList.contains('hidden'))return;
+  if(e.key>='0'&&e.key<='9')pinKey(e.key);
+  if(e.key==='Backspace')pinDel();
+});
+
+// ════════════════════════════════════════════════════
+//  DATA STORE
+// ════════════════════════════════════════════════════
+const SK='rct_repairz_v2';
+const DEF={
+  stock:[
+    {id:1,name:"Xbox 360 Slim (Black)",source:"Cash Converters",cost:26,fix:0,price:25,faults:"N/A",desc:"1 controller + games/PSU",date:"2025-10-09",status:"Sold",by:"Ryan"},
+    {id:2,name:"PlayStation 4 Pro console",source:"WA Business",cost:90,fix:0,price:150,faults:"N/A",desc:"All cables, 2 controllers",date:"2026-05-12",status:"In stock",by:"Ryan"},
+    {id:3,name:"Xbox 360 White (RROD)",source:"Salford Facebook",cost:9,fix:0,price:30,faults:"RROD",desc:"Console only, WiFi drive",date:"2025-12-31",status:"In stock",by:"Ryan"},
+    {id:4,name:"NDS Lite White",source:"Vinted",cost:20.44,fix:0,price:40,faults:"Scratched screen",desc:"Fully working",date:"2026-01-25",status:"In stock",by:"Ryan"},
+    {id:5,name:"PS4 Console Bundle",source:"Facebook delivery",cost:40,fix:0,price:70,faults:"HDMI missing comps",desc:"Console + 1 controller white",date:"2025-11-14",status:"Sold",by:"Ryan"},
+    {id:6,name:"Xbox 360 White",source:"Sunday market",cost:10,fix:0,price:30,faults:"Fully working",desc:"Console only",date:"2026-04-12",status:"In stock",by:"Ryan"},
+  ],
+  repairs:[
+    {id:1,customer:"Sarah",phone:"",item:"iPhone SE 2022 (3rd gen)",fault:"Screen side not working",parts:13.73,charge:30,pay:"Paid on collection",dateIn:"2026-01-23",due:"2026-01-23",by:"Ryan"},
+    {id:2,customer:"Mr Ayotunde",phone:"",item:"Samsung Galaxy S23 Ultra",fault:"OLED leak, cracks",parts:57.99,charge:70,pay:"Paid on collection",dateIn:"2026-01-30",due:"2026-01-30",by:"Ryan"},
+    {id:3,customer:"Jamie",phone:"",item:"PS5 Controller x2",fault:"Stick drift + needs cleaning",parts:4.34,charge:40,pay:"Unpaid",dateIn:"2026-04-06",due:"",by:"Ryan"},
+    {id:4,customer:"Mr Ayotunde",phone:"",item:"Samsung Galaxy Z Fold 3",fault:"OLED leak, cracks",parts:35.24,charge:60,pay:"Paid on collection",dateIn:"2026-03-10",due:"2026-03-10",by:"Ryan"},
+  ],
+  parts:[
+    {id:1,name:"iPhone SE 2022 screen",supplier:"AliExpress",cost:12.75,qty:1,usedFor:"R1",date:"2026-01-12",cat:"Job part"},
+    {id:2,name:"PS5 hall effect joystick",supplier:"AliExpress",cost:2.50,qty:1,usedFor:"R3",date:"2026-01-23",cat:"Job part"},
+    {id:3,name:"Soldering portable iron",supplier:"AliExpress",cost:11.20,qty:1,usedFor:"Tools",date:"2026-01-23",cat:"Tool"},
+    {id:4,name:"Samsung S23 Ultra screen",supplier:"AliExpress",cost:57.99,qty:1,usedFor:"R2",date:"2026-01-30",cat:"Job part"},
+    {id:5,name:"Business cards x200",supplier:"AliExpress",cost:5.70,qty:1,usedFor:"Tools",date:"2026-04-23",cat:"Tool"},
+    {id:6,name:"25 drawer storage cabinet",supplier:"AliExpress",cost:17.70,qty:1,usedFor:"Tools",date:"2026-04-28",cat:"Tool"},
+  ],
+  joblots:[
+    {id:1,name:"iPhone 14 Pro Max black case",ref:"JL33",cost:0,price:10,action:"Sold",desc:"Black case",date:"2026-03-08"},
+    {id:2,name:"Saints Row 2 (Xbox 360)",ref:"JL4",cost:0,price:3,action:"Sell",desc:"Game CD only",date:"2026-03-08"},
+    {id:3,name:"Nintendo Switch Lite battery",ref:"JL6",cost:0,price:5,action:"Sell",desc:"Just battery",date:"2026-03-08"},
+    {id:4,name:"PS4 camera",ref:"JL1",cost:0,price:10,action:"Keep",desc:"",date:"2026-03-08"},
+    {id:5,name:"Blackberry phones x5",ref:"JL7",cost:0,price:0,action:"Sell",desc:"",date:"2026-03-08"},
+  ],
+  returns:[
+    {id:1,ref:"JL33",name:"iPhone 14 Pro Max black case",soldFor:8,returnCost:2.94,date:"2026-04-07",reason:"Not the case wanted – paid own shipping"},
+  ],
+  settings:{username:"Employee",clientId:CLIENT_ID,odAccountName:""}
+};
+
+function load(){try{const r=localStorage.getItem(SK);if(r)return JSON.parse(r);}catch(e){}return JSON.parse(JSON.stringify(DEF));}
+let db=load();
+let nid={
+  stock:Math.max(...db.stock.map(x=>x.id),0)+1,
+  repairs:Math.max(...db.repairs.map(x=>x.id),0)+1,
+  parts:Math.max(...db.parts.map(x=>x.id),0)+1,
+  joblots:Math.max(...db.joblots.map(x=>x.id),0)+1,
+  returns:Math.max(...db.returns.map(x=>x.id),0)+1
+};
+
+// ════════════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════════════
+function today(){return new Date().toISOString().split('T')[0];}
+function f(n){return'£'+(parseFloat(n)||0).toFixed(2);}
+function gp(c,fx,p){return parseFloat(p||0)-parseFloat(c||0)-parseFloat(fx||0);}
+function guser(){return db.settings.username||'Employee';}
+function ini(n){return n.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);}
+function sbadge(s){const m={'Sold':'bg','In stock':'bb','For parts':'bgr','Trade':'ba'};return`<span class="badge ${m[s]||'bgr'}">${s}</span>`;}
+function pbadge(p){if(p==='Unpaid')return'<span class="badge br">Unpaid</span>';if(p==='Paid upfront')return'<span class="badge bg">Paid upfront</span>';return'<span class="badge bb">On collection</span>';}
+function abadge(a){const m={'Sell':'ba','Keep':'bgr','Sold':'bg'};return`<span class="badge ${m[a]||'bgr'}">${a}</span>`;}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+function updateChip(){
+  const n=guser();
+  document.getElementById('u-nm').textContent=n;
+  document.getElementById('u-av').textContent=ini(n);
+}
+
+// ════════════════════════════════════════════════════
+//  NAVIGATION
+// ════════════════════════════════════════════════════
+const TITLES={dashboard:'Dashboard',stock:'Stock',repairs:'Repairs',parts:'Parts Bought',joblots:'Job Lots',returns:'Returns'};
+let currentSection='dashboard';
+function show(id){
+  currentSection=id;
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('section-'+id).classList.add('active');
+  document.getElementById('nav-'+id).classList.add('active');
+  document.getElementById('tb-title').textContent=TITLES[id];
+  ({dashboard:rDash,stock:rStock,repairs:rRepairs,parts:rParts,joblots:rJL,returns:rReturns})[id]();
+}
+function refreshCurrentSection(){
+  ({dashboard:rDash,stock:rStock,repairs:rRepairs,parts:rParts,joblots:rJL,returns:rReturns})[currentSection]();
+}
+
+// ════════════════════════════════════════════════════
+//  DASHBOARD
+// ════════════════════════════════════════════════════
+function rDash(){
+  const inStock=db.stock.filter(s=>s.status==='In stock').length;
+  const unpaidC=db.repairs.filter(r=>r.pay==='Unpaid').length;
+  const sProfit=db.stock.filter(s=>s.status==='Sold').reduce((a,s)=>a+gp(s.cost,s.fix,s.price),0);
+  const rProfit=db.repairs.filter(r=>r.pay!=='Unpaid').reduce((a,r)=>a+(parseFloat(r.charge||0)-parseFloat(r.parts||0)),0);
+  const pSpend=db.parts.reduce((a,p)=>a+parseFloat(p.cost||0)*parseInt(p.qty||1),0);
+  document.getElementById('dash-metrics').innerHTML=`
+    <div class="mc g"><div class="m-lbl">Total profit</div><div class="m-val g">${f(sProfit+rProfit)}</div></div>
+    <div class="mc b"><div class="m-lbl">Items in stock</div><div class="m-val">${inStock}</div></div>
+    <div class="mc r"><div class="m-lbl">Unpaid repairs</div><div class="m-val ${unpaidC>0?'r':'g'}">${unpaidC}</div></div>
+    <div class="mc g"><div class="m-lbl">Stock profit</div><div class="m-val g">${f(sProfit)}</div></div>
+    <div class="mc b"><div class="m-lbl">Repair profit</div><div class="m-val g">${f(rProfit)}</div></div>
+    <div class="mc a"><div class="m-lbl">Parts spend</div><div class="m-val">${f(pSpend)}</div></div>`;
+  const recent=[
+    ...db.stock.slice(-4).reverse().map(s=>({dot:'var(--blue)',label:s.name,meta:`Stock · ${s.source} · ${sbadge(s.status)}`,date:s.date})),
+    ...db.repairs.slice(-3).reverse().map(r=>({dot:r.pay==='Unpaid'?'var(--red)':'var(--green)',label:`${r.item} — ${r.customer}`,meta:`Repair · ${pbadge(r.pay)} · ${f(r.charge)}`,date:r.dateIn})),
+  ].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,6);
+  document.getElementById('recent-list').innerHTML=recent.length?recent.map(r=>`<div class="act-row"><div class="act-dot" style="background:${r.dot}"></div><div style="flex:1"><span style="color:var(--text);font-size:13px;font-weight:600">${r.label}</span><span style="margin-left:8px;font-size:12px;color:var(--text3)">${r.meta}</span></div><span style="font-size:12px;color:var(--text3)">${r.date||''}</span></div>`).join(''):'<div class="empty">No activity yet</div>';
+  const unpaid=db.repairs.filter(r=>r.pay==='Unpaid');
+  document.getElementById('unpaid-list').innerHTML=unpaid.length?unpaid.map(r=>`<div class="act-row"><div class="act-dot" style="background:var(--red)"></div><div style="flex:1"><span style="color:var(--text);font-size:13px;font-weight:600">${r.item} — ${r.customer}</span>${r.phone?`<span style="margin-left:8px;font-size:12px;color:var(--text3)">${r.phone}</span>`:''}</div><span style="font-size:13px;font-weight:700;color:var(--amber)">${f(r.charge)}</span></div>`).join(''):'<div class="empty" style="border:none;text-align:left;color:var(--green);background:var(--green-bg)">✅ No unpaid repairs</div>';
+}
+
+// ════════════════════════════════════════════════════
+//  RENDER LISTS
+// ════════════════════════════════════════════════════
+function rStock(){
+  const q=(document.getElementById('s-srch').value||'').toLowerCase();
+  const fl=document.getElementById('s-flt').value;
+  const items=db.stock.filter(s=>(s.name.toLowerCase().includes(q)||(s.source||'').toLowerCase().includes(q)||(s.faults||'').toLowerCase().includes(q))&&(!fl||s.status===fl));
+  document.getElementById('stock-list').innerHTML=items.length?items.map(s=>{const p=gp(s.cost,s.fix,s.price);return`<div class="ir"><div class="i-info"><div class="i-name">${s.name} ${sbadge(s.status)}</div><div class="i-meta">Bought ${f(s.cost)} · Fix ${f(s.fix)} · Market ${f(s.price)} · ${s.source||'—'} · ${s.faults||'—'}${s.date?' · '+s.date:''}</div></div><div class="i-actions"><span class="pnum ${p<0?'pneg':''}">${p>=0?'+':''}${f(p)}</span><button class="ibtn" onclick="editItem('stock',${s.id})">✏️ Edit</button><button class="ibtn del-btn" onclick="del('stock',${s.id})">✕</button></div></div>`;}).join(''):'<div class="empty">No items found</div>';
+}
+function rRepairs(){
+  const q=(document.getElementById('r-srch').value||'').toLowerCase();
+  const fl=document.getElementById('r-flt').value;
+  const items=db.repairs.filter(r=>(r.customer.toLowerCase().includes(q)||r.item.toLowerCase().includes(q)||(r.fault||'').toLowerCase().includes(q))&&(!fl||r.pay===fl));
+  document.getElementById('repair-list').innerHTML=items.length?items.map(r=>{const p=parseFloat(r.charge||0)-parseFloat(r.parts||0);return`<div class="ir" style="${r.pay==='Unpaid'?'border-left:3px solid var(--red)':''}"><div class="i-info"><div class="i-name">${r.item} — ${r.customer} ${pbadge(r.pay)}</div><div class="i-meta">Parts ${f(r.parts)} · Charge ${f(r.charge)} · ${r.fault||'—'}${r.phone?' · 📞 '+r.phone:''}${r.due?' · Due: '+r.due:''}</div></div><div class="i-actions"><span class="pnum">+${f(p)}</span><button class="ibtn" onclick="editItem('repairs',${r.id})">✏️ Edit</button><button class="ibtn del-btn" onclick="del('repairs',${r.id})">✕</button></div></div>`;}).join(''):'<div class="empty">No repair jobs found</div>';
+}
+function rParts(){
+  const q=(document.getElementById('p-srch').value||'').toLowerCase();
+  const fl=document.getElementById('p-flt').value;
+  const items=db.parts.filter(p=>(p.name.toLowerCase().includes(q)||(p.usedFor||'').toLowerCase().includes(q))&&(!fl||p.cat===fl));
+  document.getElementById('parts-list').innerHTML=items.length?items.map(p=>`<div class="ir"><div class="i-info"><div class="i-name">${p.name} <span class="badge bgr">${p.cat}</span></div><div class="i-meta">${p.supplier} · ${f(p.cost)} × ${p.qty} · Used for: ${p.usedFor||'—'} · ${p.date||''}</div></div><div class="i-actions"><span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text2)">${f(parseFloat(p.cost)*parseInt(p.qty))}</span><button class="ibtn" onclick="editItem('parts',${p.id})">✏️ Edit</button><button class="ibtn del-btn" onclick="del('parts',${p.id})">✕</button></div></div>`).join(''):'<div class="empty">No parts found</div>';
+}
+function rJL(){
+  const q=(document.getElementById('j-srch').value||'').toLowerCase();
+  const fl=document.getElementById('j-flt').value;
+  const items=db.joblots.filter(j=>(j.name.toLowerCase().includes(q)||(j.ref||'').toLowerCase().includes(q))&&(!fl||j.action===fl));
+  document.getElementById('jl-list').innerHTML=items.length?items.map(j=>`<div class="ir"><div class="i-info"><div class="i-name">${j.name} ${abadge(j.action)} <span style="font-size:12px;color:var(--text3);font-weight:500">${j.ref||''}</span></div><div class="i-meta">Market: ${j.price?f(j.price):'TBD'} · ${j.desc||'No description'} · ${j.date||''}</div></div><div class="i-actions"><button class="ibtn" onclick="editItem('joblots',${j.id})">✏️ Edit</button><button class="ibtn del-btn" onclick="del('joblots',${j.id})">✕</button></div></div>`).join(''):'<div class="empty">No job lot items found</div>';
+}
+function rReturns(){
+  document.getElementById('rt-list').innerHTML=db.returns.length?db.returns.map(r=>`<div class="ir"><div class="i-info"><div class="i-name">${r.name} <span class="badge br">Return</span> <span style="font-size:12px;color:var(--text3);font-weight:500">${r.ref||''}</span></div><div class="i-meta">Sold ${f(r.soldFor)} · Return cost ${f(r.returnCost)} · ${r.date||''} · ${r.reason||''}</div></div><div class="i-actions"><span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--red)">-${f(r.returnCost)}</span><button class="ibtn" onclick="editItem('returns',${r.id})">✏️ Edit</button><button class="ibtn del-btn" onclick="del('returns',${r.id})">✕</button></div></div>`).join(''):'<div class="empty">No returns logged</div>';
+}
+
+// ════════════════════════════════════════════════════
+//  ADD FUNCTIONS
+// ════════════════════════════════════════════════════
+function addStock(){
+  const name=document.getElementById('s-name').value.trim();
+  if(!name){alert('Please enter an item name.');return;}
+  db.stock.push({id:nid.stock++,name,source:document.getElementById('s-source').value,cost:parseFloat(document.getElementById('s-cost').value)||0,fix:parseFloat(document.getElementById('s-fix').value)||0,price:parseFloat(document.getElementById('s-price').value)||0,faults:document.getElementById('s-faults').value||'N/A',desc:document.getElementById('s-desc').value,date:document.getElementById('s-date').value||today(),status:document.getElementById('s-status').value,by:guser()});
+  save();clf('stock');rStock();
+}
+function addRepair(){
+  const customer=document.getElementById('r-name').value.trim();
+  const item=document.getElementById('r-item').value.trim();
+  if(!customer||!item){alert('Please enter customer name and device.');return;}
+  db.repairs.push({id:nid.repairs++,customer,phone:document.getElementById('r-phone').value,item,fault:document.getElementById('r-fault').value,parts:parseFloat(document.getElementById('r-parts').value)||0,charge:parseFloat(document.getElementById('r-charge').value)||0,pay:document.getElementById('r-pay').value,dateIn:document.getElementById('r-in').value||today(),due:document.getElementById('r-due').value,by:guser()});
+  save();clf('repair');rRepairs();
+}
+function addPart(){
+  const name=document.getElementById('p-name').value.trim();
+  if(!name){alert('Please enter a part name.');return;}
+  db.parts.push({id:nid.parts++,name,supplier:document.getElementById('p-sup').value,cost:parseFloat(document.getElementById('p-cost').value)||0,qty:parseInt(document.getElementById('p-qty').value)||1,usedFor:document.getElementById('p-for').value||'Tools',date:document.getElementById('p-date').value||today(),cat:document.getElementById('p-cat').value});
+  save();clf('parts');rParts();
+}
+function addJL(){
+  const name=document.getElementById('j-name').value.trim();
+  if(!name){alert('Please enter an item name.');return;}
+  db.joblots.push({id:nid.joblots++,name,ref:document.getElementById('j-ref').value,cost:parseFloat(document.getElementById('j-cost').value)||0,price:parseFloat(document.getElementById('j-price').value)||0,action:document.getElementById('j-act').value,desc:document.getElementById('j-desc').value,date:document.getElementById('j-date').value||today()});
+  save();clf('joblot');rJL();
+}
+function addReturn(){
+  const name=document.getElementById('rt-name').value.trim();
+  if(!name){alert('Please enter an item name.');return;}
+  db.returns.push({id:nid.returns++,ref:document.getElementById('rt-id').value,name,soldFor:parseFloat(document.getElementById('rt-sold').value)||0,returnCost:parseFloat(document.getElementById('rt-cost').value)||0,date:document.getElementById('rt-date').value||today(),reason:document.getElementById('rt-rsn').value});
+  save();clf('return');rReturns();
+}
+
+// ════════════════════════════════════════════════════
+//  EDIT SYSTEM
+// ════════════════════════════════════════════════════
+let editState={type:null,id:null};
+function editItem(type,id){
+  const item=db[type].find(i=>i.id===id);if(!item)return;
+  editState={type,id};
+  document.getElementById('edit-title').textContent={stock:'✏️ Edit Stock Item',repairs:'✏️ Edit Repair Job',parts:'✏️ Edit Part',joblots:'✏️ Edit Job Lot Item',returns:'✏️ Edit Return'}[type];
+  let html='';
+  if(type==='stock'){html=`<div class="em-2" style="gap:12px"><div class="mi"><label>Item name</label><input id="e-name" value="${esc(item.name)}"></div><div class="mi"><label>Source</label><input id="e-source" value="${esc(item.source||'')}"></div><div class="mi"><label>Buy cost (£)</label><input id="e-cost" type="number" step="0.01" value="${item.cost}"></div><div class="mi"><label>Fix cost (£)</label><input id="e-fix" type="number" step="0.01" value="${item.fix}"></div><div class="mi"><label>Market price (£)</label><input id="e-price" type="number" step="0.01" value="${item.price}"></div><div class="mi"><label>Status</label><select id="e-status"><option${item.status==='In stock'?' selected':''}>In stock</option><option${item.status==='Sold'?' selected':''}>Sold</option><option${item.status==='For parts'?' selected':''}>For parts</option><option${item.status==='Trade'?' selected':''}>Trade</option></select></div><div class="mi"><label>Faults</label><input id="e-faults" value="${esc(item.faults||'')}"></div><div class="mi"><label>Description</label><input id="e-desc" value="${esc(item.desc||'')}"></div><div class="mi"><label>Date bought</label><input id="e-date" type="date" value="${item.date||''}"></div></div>`;}
+  else if(type==='repairs'){html=`<div class="em-2" style="gap:12px"><div class="mi"><label>Customer name</label><input id="e-customer" value="${esc(item.customer)}"></div><div class="mi"><label>Phone</label><input id="e-phone" value="${esc(item.phone||'')}"></div><div class="mi"><label>Device</label><input id="e-item" value="${esc(item.item)}"></div><div class="mi"><label>Fault</label><input id="e-fault" value="${esc(item.fault||'')}"></div><div class="mi"><label>Parts cost (£)</label><input id="e-parts" type="number" step="0.01" value="${item.parts}"></div><div class="mi"><label>Charge (£)</label><input id="e-charge" type="number" step="0.01" value="${item.charge}"></div><div class="mi"><label>Payment</label><select id="e-pay"><option${item.pay==='Unpaid'?' selected':''}>Unpaid</option><option value="Paid upfront"${item.pay==='Paid upfront'?' selected':''}>Paid upfront</option><option value="Paid on collection"${item.pay==='Paid on collection'?' selected':''}>Paid on collection</option></select></div><div class="mi"><label>Date in</label><input id="e-datein" type="date" value="${item.dateIn||''}"></div><div class="mi"><label>Due date</label><input id="e-due" type="date" value="${item.due||''}"></div></div>`;}
+  else if(type==='parts'){html=`<div class="em-2" style="gap:12px"><div class="mi"><label>Part name</label><input id="e-name" value="${esc(item.name)}"></div><div class="mi"><label>Supplier</label><select id="e-supplier"><option${item.supplier==='AliExpress'?' selected':''}>AliExpress</option><option${item.supplier==='eBay'?' selected':''}>eBay</option><option${item.supplier==='Market'?' selected':''}>Market</option><option${item.supplier==='Facebook'?' selected':''}>Facebook</option><option${item.supplier==='Other'?' selected':''}>Other</option></select></div><div class="mi"><label>Cost (£)</label><input id="e-cost" type="number" step="0.01" value="${item.cost}"></div><div class="mi"><label>Qty</label><input id="e-qty" type="number" value="${item.qty}"></div><div class="mi"><label>Used for</label><input id="e-usedfor" value="${esc(item.usedFor||'')}"></div><div class="mi"><label>Date</label><input id="e-date" type="date" value="${item.date||''}"></div><div class="mi"><label>Category</label><select id="e-cat"><option${item.cat==='Job part'?' selected':''}>Job part</option><option${item.cat==='Tool'?' selected':''}>Tool</option><option value="Stock part"${item.cat==='Stock part'?' selected':''}>Stock part</option></select></div></div>`;}
+  else if(type==='joblots'){html=`<div class="em-2" style="gap:12px"><div class="mi"><label>Item name</label><input id="e-name" value="${esc(item.name)}"></div><div class="mi"><label>Lot reference</label><input id="e-ref" value="${esc(item.ref||'')}"></div><div class="mi"><label>Buy cost (£)</label><input id="e-cost" type="number" step="0.01" value="${item.cost}"></div><div class="mi"><label>Market price (£)</label><input id="e-price" type="number" step="0.01" value="${item.price}"></div><div class="mi"><label>Action</label><select id="e-action"><option${item.action==='Sell'?' selected':''}>Sell</option><option${item.action==='Keep'?' selected':''}>Keep</option><option${item.action==='Sold'?' selected':''}>Sold</option></select></div><div class="mi"><label>Description</label><input id="e-desc" value="${esc(item.desc||'')}"></div><div class="mi"><label>Date</label><input id="e-date" type="date" value="${item.date||''}"></div></div>`;}
+  else if(type==='returns'){html=`<div class="em-2" style="gap:12px"><div class="mi"><label>Reference ID</label><input id="e-ref" value="${esc(item.ref||'')}"></div><div class="mi"><label>Item name</label><input id="e-name" value="${esc(item.name)}"></div><div class="mi"><label>Originally sold (£)</label><input id="e-soldfor" type="number" step="0.01" value="${item.soldFor}"></div><div class="mi"><label>Return cost (£)</label><input id="e-returncost" type="number" step="0.01" value="${item.returnCost}"></div><div class="mi"><label>Date of return</label><input id="e-date" type="date" value="${item.date||''}"></div><div class="mi"><label>Reason</label><input id="e-reason" value="${esc(item.reason||'')}"></div></div>`;}
+  document.getElementById('edit-body').innerHTML=html;
+  document.getElementById('edit-modal').classList.add('open');
+}
+function saveEdit(){
+  const {type,id}=editState;
+  const idx=db[type].findIndex(i=>i.id===id);if(idx===-1)return;
+  const item=db[type][idx];
+  const g=i=>document.getElementById(i);const v=i=>g(i)?g(i).value:'';const n=i=>parseFloat(v(i))||0;const ni=i=>parseInt(v(i))||0;
+  if(type==='stock')Object.assign(item,{name:v('e-name'),source:v('e-source'),cost:n('e-cost'),fix:n('e-fix'),price:n('e-price'),status:v('e-status'),faults:v('e-faults'),desc:v('e-desc'),date:v('e-date')});
+  else if(type==='repairs')Object.assign(item,{customer:v('e-customer'),phone:v('e-phone'),item:v('e-item'),fault:v('e-fault'),parts:n('e-parts'),charge:n('e-charge'),pay:v('e-pay'),dateIn:v('e-datein'),due:v('e-due')});
+  else if(type==='parts')Object.assign(item,{name:v('e-name'),supplier:v('e-supplier'),cost:n('e-cost'),qty:ni('e-qty')||1,usedFor:v('e-usedfor'),date:v('e-date'),cat:v('e-cat')});
+  else if(type==='joblots')Object.assign(item,{name:v('e-name'),ref:v('e-ref'),cost:n('e-cost'),price:n('e-price'),action:v('e-action'),desc:v('e-desc'),date:v('e-date')});
+  else if(type==='returns')Object.assign(item,{ref:v('e-ref'),name:v('e-name'),soldFor:n('e-soldfor'),returnCost:n('e-returncost'),date:v('e-date'),reason:v('e-reason')});
+  save();closeEdit();
+  ({stock:rStock,repairs:rRepairs,parts:rParts,joblots:rJL,returns:rReturns})[type]();
+}
+function closeEdit(){document.getElementById('edit-modal').classList.remove('open');editState={type:null,id:null};}
+
+// ════════════════════════════════════════════════════
+//  DELETE
+// ════════════════════════════════════════════════════
+function del(type,id){
+  if(!confirm('Remove this item?'))return;
+  db[type]=db[type].filter(i=>i.id!==id);
+  save();
+  ({stock:rStock,repairs:rRepairs,parts:rParts,joblots:rJL,returns:rReturns})[type]();
+}
+
+// ════════════════════════════════════════════════════
+//  CLEAR FORMS
+// ════════════════════════════════════════════════════
+function clf(t){
+  const m={stock:['s-name','s-source','s-cost','s-fix','s-price','s-faults','s-desc','s-date'],repair:['r-name','r-phone','r-item','r-fault','r-parts','r-charge','r-in','r-due'],parts:['p-name','p-cost','p-qty','p-for','p-date'],joblot:['j-name','j-ref','j-cost','j-price','j-desc','j-date'],return:['rt-id','rt-name','rt-sold','rt-cost','rt-date','rt-rsn']};
+  (m[t]||[]).forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+}
+
+// ════════════════════════════════════════════════════
+//  EXPORT (local backup)
+// ════════════════════════════════════════════════════
+function exportData(){
+  const b=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='RCT_Repairz_backup_'+today()+'.json';a.click();
+}
+
+// ════════════════════════════════════════════════════
+//  ONEDRIVE MODAL
+// ════════════════════════════════════════════════════
+function openOD(){
+  document.getElementById('od-uname').value=db.settings.username||'';
+  document.getElementById('od-modal').classList.add('open');
+  updateODUI();
+}
+function closeOD(){
+  const name=document.getElementById('od-uname').value.trim();
+  if(name){db.settings.username=name;saveLocal();updateChip();}
+  document.getElementById('od-modal').classList.remove('open');
+}
+
+// ════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════
+updateChip();
+rDash();
+updateODUI();
+initMSAL();
+</script>
+</body>
+</html>
